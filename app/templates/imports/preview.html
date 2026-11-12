@@ -1,0 +1,146 @@
+{% extends 'base.html' %}
+
+{% block title %}Import Preview - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Import Verification & Preview</h2>
+    <p class="text-muted small mb-0">Inspect parsed transactions, duplicate warnings, and automatic category predictions</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('imports.map_columns', batch_id=batch.id) }}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i> Remap Columns
+    </a>
+    {% if valid_rows %}
+    <form action="{{ url_for('imports.confirm', batch_id=batch.id) }}" method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-success d-flex align-items-center gap-2 px-4 fw-semibold">
+        <i class="bi bi-check2-circle fs-5"></i> Confirm & Commit ({{ valid_rows | length }} rows)
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Stats Row -->
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card p-3 bg-white border-0 shadow-sm">
+      <div class="text-muted small text-uppercase fw-semibold">Total Rows Parsed</div>
+      <div class="fs-3 fw-bold text-dark">{{ batch.total_rows }}</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 bg-white border-0 shadow-sm">
+      <div class="text-muted small text-uppercase fw-semibold">Approved Valid Rows</div>
+      <div class="fs-3 fw-bold text-success">{{ valid_rows | length }}</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 bg-white border-0 shadow-sm">
+      <div class="text-muted small text-uppercase fw-semibold">Rejected / Malformed Rows</div>
+      <div class="fs-3 fw-bold {% if errors %}text-danger{% else %}text-muted{% endif %}">{{ errors | length }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Valid Rows Preview Table -->
+<div class="card shadow-sm border-0 mb-4">
+  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+    <h6 class="mb-0 fw-bold"><i class="bi bi-check2-square text-success me-2"></i>Valid Transactions Preview</h6>
+    <span class="badge bg-light text-muted border">Showing {{ valid_rows | length }} Rows</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0 small">
+      <thead class="table-light">
+        <tr>
+          <th>Row</th>
+          <th>Date</th>
+          <th>Description</th>
+          <th>Type</th>
+          <th>Suggested Category</th>
+          <th>Method</th>
+          <th>Duplicate Warning</th>
+          <th class="text-end">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in valid_rows %}
+        <tr class="{% if r.is_duplicate %}table-warning{% endif %}">
+          <td class="font-monospace text-muted">{{ r.row_number }}</td>
+          <td>{{ r.date }}</td>
+          <td>
+            <span class="fw-semibold">{{ r.description }}</span>
+            {% if r.reference %}
+              <div class="text-muted" style="font-size: 0.75rem;">Ref: {{ r.reference }}</div>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge {% if r.direction == 'income' %}bg-success-subtle text-success{% else %}bg-danger-subtle text-danger{% endif %} text-uppercase">
+              {{ r.direction }}
+            </span>
+          </td>
+          <td>
+            <span class="badge bg-light text-dark border">{{ r.predicted_category_name }}</span>
+          </td>
+          <td>
+            {% if r.method != 'None' %}
+              <span class="badge bg-info-subtle text-info">{{ r.method }} ({{ (r.confidence | float * 100) | round(0) }}%)</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if r.is_duplicate %}
+              <span class="badge bg-warning text-dark" title="{{ r.duplicate_reason }}">
+                <i class="bi bi-exclamation-triangle me-1"></i> Probable Duplicate
+              </span>
+            {% else %}
+              <span class="badge bg-light text-success border"><i class="bi bi-check-lg"></i> Unique</span>
+            {% endif %}
+          </td>
+          <td class="text-end fw-bold {% if r.direction == 'income' %}text-success{% else %}text-danger{% endif %}">
+            {{ r.amount | currency(r.currency_code) }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Errors Card if any -->
+{% if errors %}
+<div class="card shadow-sm border-0 border-top border-danger border-3">
+  <div class="card-header bg-white py-3">
+    <h6 class="mb-0 fw-bold text-danger"><i class="bi bi-exclamation-octagon-fill me-2"></i>Invalid Rows Quarantined (Will be Skipped)</h6>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0 small">
+      <thead class="table-light">
+        <tr>
+          <th>Row</th>
+          <th>Error Code</th>
+          <th>Reason</th>
+          <th>Raw Data</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for err in errors %}
+        <tr>
+          <td class="font-monospace text-danger fw-bold">{{ err.row_number }}</td>
+          <td><span class="badge bg-danger-subtle text-danger">{{ err.error_code }}</span></td>
+          <td class="text-danger">{{ err.message }}</td>
+          <td class="font-monospace text-muted" style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            {{ err.raw_row_json }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+

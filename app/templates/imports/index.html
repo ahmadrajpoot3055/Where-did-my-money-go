@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+
+{% block title %}Statement Imports - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Statement Import History</h2>
+    <p class="text-muted small mb-0">Upload bank or wallet statements (CSV/Excel) with preview and duplicate check</p>
+  </div>
+  <a href="{{ url_for('imports.new') }}" class="btn btn-primary d-flex align-items-center gap-2">
+    <i class="bi bi-cloud-arrow-up"></i> Upload New Statement
+  </a>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>ID</th>
+          <th>Uploaded At</th>
+          <th>Original File</th>
+          <th>Target Account</th>
+          <th>Format</th>
+          <th>Total Rows</th>
+          <th>Status</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in batches %}
+        <tr>
+          <td class="font-monospace text-muted">#{{ b.id }}</td>
+          <td class="small">{{ b.created_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td class="fw-semibold">{{ b.original_filename }}</td>
+          <td>{{ b.account.name }}</td>
+          <td><span class="badge bg-light text-dark border">{{ b.file_type }}</span></td>
+          <td>
+            <span class="fw-semibold text-success">{{ b.accepted_rows }}</span> / 
+            <span class="text-muted">{{ b.total_rows }}</span>
+            {% if b.rejected_rows > 0 %}
+              <span class="badge bg-danger-subtle text-danger ms-1">{{ b.rejected_rows }} errors</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if b.status == 'Completed' %}
+              <span class="badge bg-success-subtle text-success border border-success-subtle">Completed</span>
+            {% elif b.status == 'CompletedWithErrors' %}
+              <span class="badge bg-warning-subtle text-warning border border-warning-subtle">With Errors</span>
+            {% elif b.status == 'Preview' %}
+              <span class="badge bg-info-subtle text-info border border-info-subtle">Awaiting Confirm</span>
+            {% elif b.status == 'Failed' %}
+              <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Failed</span>
+            {% else %}
+              <span class="badge bg-secondary-subtle text-secondary">{{ b.status }}</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            {% if b.status == 'Preview' %}
+              <a href="{{ url_for('imports.preview', batch_id=b.id) }}" class="btn btn-sm btn-warning">Preview & Confirm</a>
+            {% else %}
+              <a href="{{ url_for('imports.summary', batch_id=b.id) }}" class="btn btn-sm btn-light border">Summary</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" class="text-center py-5 text-muted">
+            <i class="bi bi-cloud-arrow-up fs-2"></i>
+            <p class="mt-2 mb-0">No statements uploaded yet.</p>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+

@@ -1,0 +1,1106 @@
+1. User
+Purpose: Application identity and account owner.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+full_name
+String(120)
+Required
+email
+String(255)
+Required, unique, indexed
+password_hash
+String(255)
+Required; never store plaintext
+role_id
+Integer FK
+Required → roles.id
+is_active
+Boolean
+Default true
+created_at
+DateTime
+Required
+Relationships: Many users may share a role; one user owns many accounts, transactions, imports, budgets and reports.
+Business rules: Normalize email before uniqueness check; disable rather than hard-delete users with financial history.
+2. Role
+Purpose: Defines permission groups.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+name
+String(40)
+Unique; admin/user
+description
+String(255)
+Optional
+Relationships: One role to many users.
+Business rules: Seed controlled roles; enforce permissions server-side.
+3. UserSession
+Purpose: Tracks application sessions for audit/revocation.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+→ users.id
+session_token_hash
+String(255)
+Unique hash only; do not store raw token
+created_at
+DateTime
+Required
+expires_at
+DateTime
+Required
+revoked_at
+DateTime
+Nullable
+ip_hash
+String(128)
+Optional privacy-preserving value
+Relationships: Many sessions belong to one user.
+Business rules: Flask signed session cookie is still used; this table is for session tracking/revocation if implemented.
+4. PasswordReset
+Purpose: Stores expiring password-reset tokens.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+→ users.id
+token_hash
+String(255)
+Unique; never store raw token
+expires_at
+DateTime
+Required
+used_at
+DateTime
+Nullable
+created_at
+DateTime
+Required
+Relationships: Many reset requests belong to one user.
+Business rules: Single use; short expiry; rate limit requests.
+5. UserPreference
+Purpose: User display and analysis preferences.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+Unique → users.id
+currency_code
+String(3)
+Default PKR
+timezone
+String(64)
+Default Asia/Karachi
+theme
+String(20)
+Default light
+week_start
+Integer
+0–6
+created_at
+DateTime
+Required
+updated_at
+DateTime
+Required
+Relationships: One-to-one with User.
+Business rules: Validate currency/timezone values.
+6. LoginHistory
+Purpose: Security event history.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+→ users.id; nullable for unknown email attempts if designed safely
+event_type
+String(30)
+Success/Failure/Logout
+occurred_at
+DateTime
+Required
+ip_hash
+String(128)
+Optional
+user_agent
+String(255)
+Optional
+Relationships: Many login events belong to one user where known.
+Business rules: Do not log passwords or session secrets; define retention.
+7. FinancialAccount
+Purpose: A user's bank, cash or wallet account.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+→ users.id
+account_type_id
+Integer FK
+→ account_types.id
+name
+String(100)
+Required
+institution_name
+String(120)
+Optional label
+currency_code
+String(3)
+Required
+opening_balance
+Numeric(12,2)
+Default 0
+is_active
+Boolean
+Default true
+created_at
+DateTime
+Required
+Relationships: One user owns many accounts; account has one type and many transactions/imports.
+Business rules: Never store banking login credentials; account name is user-defined.
+8. AccountType
+Purpose: Controlled account type lookup.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+name
+String(40)
+Unique; current/savings/cash/wallet/credit
+description
+String(255)
+Optional
+Relationships: One type to many financial accounts.
+Business rules: Seed lookup rows.
+9. ImportBatch
+Purpose: One uploaded statement/import attempt.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+→ users.id
+account_id
+Integer FK
+→ financial_accounts.id
+original_filename
+String(255)
+Required safe display name
+file_hash
+String(64)
+Optional SHA-256 for file-level duplicate warning
+status
+String(30)
+Uploaded/Processing/Preview/Completed/Failed
+total_rows
+Integer
+Default 0
+accepted_rows
+Integer
+Default 0
+rejected_rows
+Integer
+Default 0
+created_at
+DateTime
+Required
+completed_at
+DateTime
+Nullable
+Relationships: One user/account has many batches; batch has many errors and transactions.
+Business rules: Verify account ownership; store upload outside public static; delete temporary source per retention policy.
+10. ImportMapping
+Purpose: Maps a statement format's columns to canonical fields.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+→ users.id; nullable for global template
+account_type_id
+Integer FK
+→ account_types.id; nullable
+mapping_name
+String(100)
+Required
+date_column
+String(100)
+Required
+description_column
+String(100)
+Required
+amount_column
+String(100)
+Nullable if debit/credit columns used
+debit_column
+String(100)
+Optional
+credit_column
+String(100)
+Optional
+date_format
+String(40)
+Optional
+delimiter
+String(5)
+CSV delimiter
+Relationships: Mappings can be user-specific or shared templates.
+Business rules: Validate mapping columns exist in uploaded file.
+11. ImportError
+Purpose: Row-level import validation failures.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+batch_id
+Integer FK
+→ import_batches.id
+row_number
+Integer
+Required
+error_code
+String(40)
+Required
+message
+String(500)
+Required
+raw_row_json
+Text
+Optional; avoid unnecessary sensitive data
+created_at
+DateTime
+Required
+Relationships: Many errors belong to one import batch.
+Business rules: Escape output; limit stored raw data.
+12. Transaction
+Purpose: Canonical income, expense or transfer record.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+→ users.id
+account_id
+Integer FK
+→ financial_accounts.id
+import_batch_id
+Integer FK
+Nullable → import_batches.id
+transaction_type_id
+Integer FK
+→ transaction_types.id
+transaction_status_id
+Integer FK
+→ transaction_statuses.id
+category_id
+Integer FK
+Nullable → categories.id
+merchant_id
+Integer FK
+Nullable → merchants.id
+transaction_date
+Date
+Required
+description_original
+String(500)
+Preserve bank wording
+description_normalized
+String(500)
+Normalized search/classification text
+amount
+Numeric(12,2)
+Positive absolute amount
+currency_code
+String(3)
+Required
+reference
+String(120)
+Optional bank reference
+category_confidence
+Numeric(5,4)
+0 to 1 nullable
+category_method
+String(30)
+Rule/Merchant/ML/Manual
+is_reviewed
+Boolean
+Default false
+created_at
+DateTime
+Required
+updated_at
+DateTime
+Required
+Relationships: User/account has many transactions; transaction belongs to type/status and optionally category/merchant/import batch.
+Business rules: Store positive amount and use transaction type for direction; transfers must not be counted as income/expense. Add indexes on user/date, account/date and category/date.
+13. TransactionType
+Purpose: Controlled transaction direction/type.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+name
+String(30)
+Unique; income/expense/transfer
+description
+String(255)
+Optional
+Relationships: One type to many transactions.
+Business rules: Seed the three values.
+14. TransactionStatus
+Purpose: Transaction lifecycle status.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+name
+String(30)
+Unique; completed/pending/void/failed
+description
+String(255)
+Optional
+Relationships: One status to many transactions.
+Business rules: Define which statuses count in analytics.
+15. TransactionTag
+Purpose: User-defined labels attached to transactions.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+→ users.id
+name
+String(40)
+Required; unique per user
+color
+String(20)
+Optional UI color
+Relationships: Many-to-many with Transaction; implement association table transaction_tag_links.
+Business rules: This is one ORM model plus an association table. If strict 40 physical tables are counted, include the association table as an additional table and adjust count.
+16. TransactionNote
+Purpose: Private note on a transaction.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+transaction_id
+Integer FK
+→ transactions.id
+user_id
+Integer FK
+→ users.id
+body
+Text
+Required
+created_at
+DateTime
+Required
+updated_at
+DateTime
+Required
+Relationships: Many notes may belong to a transaction; note is owned by user.
+Business rules: Verify note user owns the transaction.
+17. TransactionAttachment
+Purpose: Metadata for a file attached to a transaction.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+transaction_id
+Integer FK
+→ transactions.id
+user_id
+Integer FK
+→ users.id
+stored_name
+String(255)
+Random server filename
+original_name
+String(255)
+Display only
+mime_type
+String(100)
+Allowlist
+size_bytes
+Integer
+Positive
+created_at
+DateTime
+Required
+Relationships: Many attachments may belong to a transaction.
+Business rules: Private storage; validate type and size; do not trust filename or MIME supplied by browser.
+18. TransactionSplit
+Purpose: Allocates one transaction across multiple categories.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+transaction_id
+Integer FK
+→ transactions.id
+category_id
+Integer FK
+→ categories.id
+amount
+Numeric(12,2)
+Positive
+note
+String(255)
+Optional
+Relationships: One transaction may have many splits; each split belongs to one category.
+Business rules: Sum of splits must equal transaction amount; enforce in service transaction.
+19. Category
+Purpose: Top-level user/global spending category.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+Nullable → users.id; null means global
+name
+String(80)
+Required
+kind
+String(20)
+Income/Expense/Both
+is_active
+Boolean
+Default true
+created_at
+DateTime
+Required
+Relationships: One category has many subcategories and transactions.
+Business rules: Unique name per owner and kind; seed standard categories.
+20. Subcategory
+Purpose: More detailed category beneath a category.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+category_id
+Integer FK
+→ categories.id
+name
+String(80)
+Required
+is_active
+Boolean
+Default true
+Relationships: One category has many subcategories.
+Business rules: Unique name within parent category.
+21. Merchant
+Purpose: Recognized business or payment recipient.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+name
+String(120)
+Canonical merchant name
+default_category_id
+Integer FK
+Nullable → categories.id
+website
+String(255)
+Optional
+is_active
+Boolean
+Default true
+Relationships: One merchant may match many transactions and aliases.
+Business rules: Global merchant data must not expose user-specific transaction history.
+22. MerchantAlias
+Purpose: Alternative statement text for a merchant.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+merchant_id
+Integer FK
+→ merchants.id
+alias_text
+String(180)
+Required; normalized and indexed
+source
+String(30)
+Admin/User/Imported
+created_at
+DateTime
+Required
+Relationships: Many aliases point to one merchant.
+Business rules: Avoid ambiguous alias collisions; exact/normalized matching first.
+23. CategoryRule
+Purpose: Keyword/regex rule for transaction categorization.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+Nullable → users.id; null means global
+category_id
+Integer FK
+→ categories.id
+pattern
+String(200)
+Required
+match_type
+String(20)
+Contains/Exact/Regex
+priority
+Integer
+Higher checked first
+is_active
+Boolean
+Default true
+Relationships: Many rules may target a category.
+Business rules: Validate regex safely; user rules override global rules only according to explicit priority policy.
+24. Budget
+Purpose: Budget header for a time period.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+→ users.id
+name
+String(100)
+Required
+period_type
+String(20)
+Monthly/Weekly/Custom
+start_date
+Date
+Required
+end_date
+Date
+Required
+currency_code
+String(3)
+Required
+is_active
+Boolean
+Default true
+Relationships: One user has many budgets; one budget has many budget items.
+Business rules: End date must not precede start date.
+25. BudgetItem
+Purpose: Budget limit for one category.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+budget_id
+Integer FK
+→ budgets.id
+category_id
+Integer FK
+→ categories.id
+limit_amount
+Numeric(12,2)
+Positive
+warning_percent
+Numeric(5,2)
+Example 80.00
+Relationships: Many items belong to one budget; each references a category.
+Business rules: Prevent duplicate category within same budget.
+26. SavingsGoal
+Purpose: A savings target.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+→ users.id
+name
+String(100)
+Required
+target_amount
+Numeric(12,2)
+Positive
+target_date
+Date
+Optional
+currency_code
+String(3)
+Required
+status
+String(20)
+Active/Completed/Paused
+created_at
+DateTime
+Required
+Relationships: One user has many goals; one goal has many contributions.
+Business rules: Goal progress is sum of contributions; do not treat contribution as a bank transfer unless separately recorded.
+27. SavingsContribution
+Purpose: A contribution to a savings goal.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+goal_id
+Integer FK
+→ savings_goals.id
+amount
+Numeric(12,2)
+Positive
+contribution_date
+Date
+Required
+note
+String(255)
+Optional
+Relationships: Many contributions belong to one goal.
+Business rules: Validate goal ownership and currency.
+28. BudgetAlert
+Purpose: A budget threshold alert event.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+budget_item_id
+Integer FK
+→ budget_items.id
+threshold_percent
+Numeric(5,2)
+Required
+actual_percent
+Numeric(7,2)
+Required
+message
+String(255)
+Required
+created_at
+DateTime
+Required
+is_read
+Boolean
+Default false
+Relationships: Many alerts may relate to one budget item.
+Business rules: Deduplicate alerts by budget item, period and threshold.
+29. AnomalyModel
+Purpose: Metadata for an anomaly detection model/version.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+name
+String(100)
+Required
+version
+String(40)
+Required
+algorithm
+String(80)
+Required
+artifact_path
+String(255)
+Optional private path
+trained_at
+DateTime
+Optional
+is_active
+Boolean
+Default false
+Relationships: One model version can be referenced by many analysis runs.
+Business rules: Do not store executable artifacts in a public directory.
+30. AnalysisRun
+Purpose: One analytics/anomaly processing execution.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+→ users.id
+anomaly_model_id
+Integer FK
+Nullable → anomaly_models.id
+start_date
+Date
+Required
+end_date
+Date
+Required
+status
+String(20)
+Queued/Running/Completed/Failed
+started_at
+DateTime
+Optional
+completed_at
+DateTime
+Optional
+Relationships: One user has many runs; one model can be used in many runs.
+Business rules: Validate date range and record failures without exposing sensitive data.
+31. AnomalyResult
+Purpose: An unusual transaction finding.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+analysis_run_id
+Integer FK
+→ analysis_runs.id
+transaction_id
+Integer FK
+→ transactions.id
+score
+Numeric(7,4)
+Required; documented scale
+reason
+String(500)
+Human-readable explanation
+status
+String(25)
+New/Reviewed/Expected/Incorrect
+created_at
+DateTime
+Required
+Relationships: Many results belong to a run; each points to a transaction.
+Business rules: Must enforce transaction belongs to run's user. Score is not proof of fraud.
+32. AnomalyReview
+Purpose: User response to an anomaly result.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+anomaly_result_id
+Integer FK
+→ anomaly_results.id
+user_id
+Integer FK
+→ users.id
+decision
+String(30)
+Expected/Incorrect/FollowUp
+comment
+String(500)
+Optional
+reviewed_at
+DateTime
+Required
+Relationships: One result can have review history; review belongs to a user.
+Business rules: Only owner or authorized support workflow may review.
+33. Subscription
+Purpose: Confirmed recurring payment definition.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+→ users.id
+merchant_id
+Integer FK
+Nullable → merchants.id
+name
+String(120)
+Required
+expected_amount
+Numeric(12,2)
+Optional
+currency_code
+String(3)
+Required
+frequency
+String(20)
+Weekly/Monthly/Yearly/Other
+next_expected_date
+Date
+Optional
+status
+String(20)
+Active/Cancelled/Paused
+Relationships: One user has many subscriptions; subscription can link to many payments.
+Business rules: Only mark confirmed after user approval or strong documented rule.
+34. SubscriptionPayment
+Purpose: Actual transaction matched to a subscription.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+subscription_id
+Integer FK
+→ subscriptions.id
+transaction_id
+Integer FK
+Unique → transactions.id
+paid_amount
+Numeric(12,2)
+Required
+paid_date
+Date
+Required
+Relationships: Many payments belong to one subscription; transaction linked at most once.
+Business rules: Validate same user and currency.
+35. SubscriptionDetection
+Purpose: Candidate recurring-payment pattern.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+→ users.id
+merchant_id
+Integer FK
+Nullable → merchants.id
+candidate_name
+String(120)
+Required
+frequency_guess
+String(20)
+Required
+confidence
+Numeric(5,4)
+0 to 1
+evidence_json
+Text
+Optional compact evidence
+status
+String(20)
+Pending/Confirmed/Rejected
+created_at
+DateTime
+Required
+Relationships: Many candidates belong to a user; confirmed candidate can create a Subscription.
+Business rules: Do not create a confirmed subscription without review unless product policy explicitly allows it.
+36. Report
+Purpose: A generated user financial report.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+→ users.id
+title
+String(150)
+Required
+period_start
+Date
+Required
+period_end
+Date
+Required
+format
+String(10)
+PDF/CSV
+file_path
+String(255)
+Private storage path
+status
+String(20)
+Queued/Ready/Failed
+created_at
+DateTime
+Required
+Relationships: One user has many reports; one report has many sections.
+Business rules: Verify ownership before download; generated file must not be public by guessable URL.
+37. ReportSection
+Purpose: A section in a generated report.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+report_id
+Integer FK
+→ reports.id
+section_key
+String(50)
+Required
+title
+String(120)
+Required
+content_json
+Text
+Required structured content
+display_order
+Integer
+Required
+Relationships: Many sections belong to one report.
+Business rules: Validate JSON before storing; do not store arbitrary executable markup.
+38. Notification
+Purpose: An in-app message for a user.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+→ users.id
+notification_type
+String(40)
+Required
+title
+String(120)
+Required
+body
+String(500)
+Required
+target_url
+String(255)
+Optional internal route
+is_read
+Boolean
+Default false
+created_at
+DateTime
+Required
+Relationships: One user has many notifications.
+Business rules: Escape content and allow only safe internal destinations.
+39. NotificationPreference
+Purpose: Per-user notification controls.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+Unique → users.id
+budget_alerts
+Boolean
+Default true
+anomaly_alerts
+Boolean
+Default true
+subscription_alerts
+Boolean
+Default true
+email_enabled
+Boolean
+Default false
+created_at
+DateTime
+Required
+Relationships: One-to-one with User.
+Business rules: Respect opt-in; do not send email without configured provider and consent.
+40. UserFeedback
+Purpose: User feedback and categorization corrections.
+Field
+Suggested SQL type
+Rules / meaning
+id
+Integer PK
+Primary key
+user_id
+Integer FK
+→ users.id
+transaction_id
+Integer FK
+Nullable → transactions.id
+feedback_type
+String(40)
+Required
+message
+Text
+Optional
+suggested_category_id
+Integer FK
+Nullable → categories.id
+created_at
+DateTime
+Required
+review_status
+String(20)
+New/Reviewed/Resolved
+Relationships: Many feedback records belong to a user and may reference a transaction/category.
+Business rules: Feedback is not automatically trusted training data; validate and review before model training.
+12. Entity Relationships and ER Overview

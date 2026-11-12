@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+
+{% block title %}Financial Reports - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Financial Intelligence Reports</h2>
+    <p class="text-muted small mb-0">Generate, view, and export monthly and periodic financial summaries</p>
+  </div>
+  <a href="{{ url_for('reports.new') }}" class="btn btn-primary d-flex align-items-center gap-2">
+    <i class="bi bi-file-earmark-plus"></i> Generate Report
+  </a>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>ID</th>
+          <th>Report Title</th>
+          <th>Reporting Period</th>
+          <th>Generated At</th>
+          <th>Format</th>
+          <th>Status</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in reports %}
+        <tr>
+          <td class="font-monospace text-muted">#{{ r.id }}</td>
+          <td>
+            <a href="{{ url_for('reports.view', report_id=r.id) }}" class="fw-semibold text-dark text-decoration-none">
+              {{ r.title }}
+            </a>
+          </td>
+          <td class="text-muted small">
+            {{ r.period_start.strftime('%d %b %Y') }} &ndash; {{ r.period_end.strftime('%d %b %Y') }}
+          </td>
+          <td class="text-muted small">{{ r.created_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td><span class="badge bg-light text-dark border">{{ r.format }}</span></td>
+          <td><span class="badge bg-success-subtle text-success">{{ r.status }}</span></td>
+          <td class="text-end">
+            <a href="{{ url_for('reports.view', report_id=r.id) }}" class="btn btn-sm btn-light border" title="View in browser">
+              <i class="bi bi-eye"></i> View
+            </a>
+            {% if r.file_path %}
+            <a href="{{ url_for('reports.download', report_id=r.id) }}" class="btn btn-sm btn-outline-primary ms-1" title="Download spreadsheet">
+              <i class="bi bi-download"></i> CSV
+            </a>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="text-center py-5 text-muted">
+            <i class="bi bi-file-earmark-bar-graph fs-2"></i>
+            <p class="mt-2 mb-0">No reports generated yet.</p>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+

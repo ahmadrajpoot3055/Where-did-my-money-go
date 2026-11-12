@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block title %}Savings Goals - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Savings Targets & Goals</h2>
+    <p class="text-muted small mb-0">Track progress toward emergency funds, travel reserves, and long-term milestones</p>
+  </div>
+  <a href="{{ url_for('goals.new') }}" class="btn btn-primary d-flex align-items-center gap-2">
+    <i class="bi bi-plus-lg"></i> Create Savings Goal
+  </a>
+</div>
+
+<div class="row g-4">
+  {% for g in goals %}
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+          <div>
+            <h5 class="fw-bold mb-1">{{ g.name }}</h5>
+            <div class="text-muted small">
+              Target Date: {{ g.target_date.strftime('%d %b %Y') if g.target_date else 'Flexible / None' }}
+            </div>
+          </div>
+          <span class="badge {% if g.status == 'Completed' %}bg-success-subtle text-success{% else %}bg-primary-subtle text-primary{% endif %} text-uppercase">
+            {{ g.status }}
+          </span>
+        </div>
+
+        <div class="mb-3">
+          <div class="d-flex justify-content-between align-items-baseline mb-1">
+            <span class="fs-4 fw-bold text-success">{{ g.current_saved | currency(g.currency_code) }}</span>
+            <span class="text-muted small">Target: {{ g.target_amount | currency(g.currency_code) }}</span>
+          </div>
+          <div class="progress" style="height: 12px;">
+            <div class="progress-bar {% if g.progress_percent >= 100 %}bg-success{% else %}bg-primary{% endif %}"
+                 style="width: {{ g.progress_percent }}%;">
+            </div>
+          </div>
+          <div class="text-end text-muted small mt-1 fw-semibold">{{ g.progress_percent }}% Achieved</div>
+        </div>
+
+        <!-- Add Contribution Form -->
+        {% if g.status != 'Completed' %}
+        <div class="p-3 bg-light rounded border mb-3">
+          <h6 class="fw-bold small text-muted text-uppercase mb-2">Record Contribution</h6>
+          <form action="{{ url_for('goals.contribute', goal_id=g.id) }}" method="POST" class="row g-2">
+            {{ contrib_form.hidden_tag() }}
+            <div class="col-md-5">
+              {{ contrib_form.amount(class="form-control form-control-sm", placeholder="Amount (" + g.currency_code + ")") }}
+            </div>
+            <div class="col-md-4">
+              {{ contrib_form.contribution_date(class="form-control form-control-sm") }}
+            </div>
+            <div class="col-md-3">
+              <button type="submit" class="btn btn-sm btn-success w-100">Add</button>
+            </div>
+          </form>
+        </div>
+        {% endif %}
+
+        <!-- Contributions History -->
+        {% if g.contributions %}
+        <div>
+          <h6 class="fw-bold small text-muted text-uppercase mb-2">Recent Contributions</h6>
+          <div class="list-group list-group-flush small" style="max-height: 120px; overflow-y: auto;">
+            {% for c in g.contributions | reverse %}
+            <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-1">
+              <span>{{ c.contribution_date.strftime('%d %b %Y') }} {% if c.note %}&bull; <span class="text-muted">{{ c.note }}</span>{% endif %}</span>
+              <span class="fw-semibold text-success">+{{ c.amount | currency(g.currency_code) }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="col-12 text-center py-5">
+    <i class="bi bi-bullseye fs-1 text-muted"></i>
+    <h5 class="mt-3 fw-bold">No Savings Goals Active</h5>
+    <p class="text-muted">Set a target for an emergency fund, travel fund, or investment milestone.</p>
+    <a href="{{ url_for('goals.new') }}" class="btn btn-primary px-4">Create Goal</a>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
+

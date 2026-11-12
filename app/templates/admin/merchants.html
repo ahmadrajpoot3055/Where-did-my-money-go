@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Merchants & Aliases - Admin - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <a href="{{ url_for('admin.index') }}" class="text-decoration-none text-muted small">
+      <i class="bi bi-arrow-left me-1"></i> Back to Admin Overview
+    </a>
+    <h2 class="fw-bold mb-0 mt-1">Merchants & Statement Aliases</h2>
+    <p class="text-muted small mb-0">Canonical businesses and the cryptic bank statement string variations mapped to them</p>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card shadow-sm border-0">
+      <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-shop text-primary me-2"></i>Canonical Merchants & Statement Aliases</h6>
+        <span class="badge bg-light text-muted border">{{ merchants | length }} Merchants</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Merchant</th>
+              <th>Default Category</th>
+              <th>Statement Aliases</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in merchants %}
+            <tr>
+              <td>
+                <div class="fw-semibold">{{ m.name }}</div>
+                {% if m.website %}
+                  <div class="small text-muted"><a href="{{ m.website }}" target="_blank">{{ m.website }}</a></div>
+                {% endif %}
+              </td>
+              <td>
+                {% if m.default_category %}
+                  <span class="badge bg-light text-dark border">{{ m.default_category.name }}</span>
+                {% else %}
+                  <span class="text-muted small">None</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="d-flex flex-wrap gap-1">
+                  {% for a in m.aliases %}
+                    <span class="badge bg-light text-muted border font-monospace" style="font-size: 0.75rem;">
+                      {{ a.alias_text }}
+                    </span>
+                  {% else %}
+                    <span class="text-muted small">No aliases</span>
+                  {% endfor %}
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <!-- Add Merchant -->
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header bg-white py-3 border-bottom">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-plus-circle text-primary me-2"></i>Add Canonical Merchant</h6>
+      </div>
+      <div class="card-body p-4">
+        <form action="{{ url_for('admin.merchants') }}" method="POST">
+          {{ m_form.hidden_tag() }}
+          <div class="mb-3">
+            {{ m_form.name.label(class="form-label fw-semibold") }}
+            {{ m_form.name(class="form-control", placeholder="e.g. Starbucks") }}
+          </div>
+          <div class="mb-3">
+            {{ m_form.default_category_id.label(class="form-label fw-semibold") }}
+            {{ m_form.default_category_id(class="form-select") }}
+          </div>
+          <div class="mb-3">
+            {{ m_form.website.label(class="form-label fw-semibold") }}
+            {{ m_form.website(class="form-control", placeholder="https://...") }}
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Save Merchant</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Add Alias -->
+    <div class="card shadow-sm border-0">
+      <div class="card-header bg-white py-3 border-bottom">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-link-45deg text-primary me-2"></i>Add Statement Alias</h6>
+      </div>
+      <div class="card-body p-4">
+        <form action="{{ url_for('admin.add_merchant_alias') }}" method="POST">
+          {{ alias_form.hidden_tag() }}
+          <div class="mb-3">
+            {{ alias_form.merchant_id.label(class="form-label fw-semibold") }}
+            {{ alias_form.merchant_id(class="form-select") }}
+          </div>
+          <div class="mb-3">
+            {{ alias_form.alias_text.label(class="form-label fw-semibold") }}
+            {{ alias_form.alias_text(class="form-control", placeholder="e.g. POS PURCHASE STARBUCKS") }}
+            <div class="form-text">Exact or keyword phrase that appears on bank statements.</div>
+          </div>
+          <button type="submit" class="btn btn-outline-primary w-100">Add Alias Mapping</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

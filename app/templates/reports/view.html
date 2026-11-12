@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ report.title }} - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <a href="{{ url_for('reports.index') }}" class="text-decoration-none text-muted small">
+      <i class="bi bi-arrow-left me-1"></i> Back to Reports
+    </a>
+    <h2 class="fw-bold mb-0 mt-1">{{ report.title }}</h2>
+    <div class="text-muted small">Reporting Window: {{ report.period_start.strftime('%d %b %Y') }} &ndash; {{ report.period_end.strftime('%d %b %Y') }}</div>
+  </div>
+  <div>
+    {% if report.file_path %}
+    <a href="{{ url_for('reports.download', report_id=report.id) }}" class="btn btn-outline-primary">
+      <i class="bi bi-download me-1"></i> Download CSV Spreadsheet
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+{% for sec in sections %}
+<div class="card shadow-sm border-0 mb-4">
+  <div class="card-header bg-white py-3 border-bottom">
+    <h5 class="mb-0 fw-bold"><i class="bi bi-bookmark-check text-primary me-2"></i>{{ sec.title }}</h5>
+  </div>
+  <div class="card-body p-4">
+    {% if sec.key == 'summary' %}
+      <div class="row g-3">
+        <div class="col-md-3">
+          <div class="p-3 bg-light rounded border text-center">
+            <div class="text-muted small text-uppercase fw-semibold">Total Income</div>
+            <div class="fs-4 fw-bold text-success">{{ sec.content.total_income | currency(sec.content.currency_code) }}</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="p-3 bg-light rounded border text-center">
+            <div class="text-muted small text-uppercase fw-semibold">Total Expenses</div>
+            <div class="fs-4 fw-bold text-danger">{{ sec.content.total_expense | currency(sec.content.currency_code) }}</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="p-3 bg-light rounded border text-center">
+            <div class="text-muted small text-uppercase fw-semibold">Net Cash Flow</div>
+            <div class="fs-4 fw-bold {% if sec.content.net_cash_flow >= 0 %}text-primary{% else %}text-danger{% endif %}">
+              {{ sec.content.net_cash_flow | currency(sec.content.currency_code) }}
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="p-3 bg-light rounded border text-center">
+            <div class="text-muted small text-uppercase fw-semibold">Savings Rate</div>
+            <div class="fs-4 fw-bold text-dark">
+              {% if sec.content.savings_rate is not none %}{{ sec.content.savings_rate }}%{% else %}N/A{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    {% elif sec.key == 'categories' %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Category</th>
+              <th>Transactions</th>
+              <th>Percentage Share</th>
+              <th class="text-end">Total Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in sec.content %}
+            <tr>
+              <td class="fw-semibold">{{ item.category }}</td>
+              <td class="text-muted small">{{ item.count }}</td>
+              <td>
+                <div class="d-flex align-items-center gap-2">
+                  <div class="progress flex-grow-1" style="height: 6px;">
+                    <div class="progress-bar bg-primary" style="width: {{ item.percentage }}%;"></div>
+                  </div>
+                  <span class="small fw-semibold">{{ item.percentage }}%</span>
+                </div>
+              </td>
+              <td class="text-end fw-bold text-dark">{{ item.amount | currency('PKR') }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="4" class="text-center py-3 text-muted">No expenses in this period.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% elif sec.key == 'trends' %}
+      <div class="row g-3">
+        {% for t in sec.content %}
+        <div class="col-md-4">
+          <div class="p-3 bg-light rounded border">
+            <h6 class="fw-bold mb-2">{{ t.month_label }}</h6>
+            <div class="small d-flex justify-content-between mb-1">
+              <span class="text-muted">Income:</span>
+              <span class="text-success fw-semibold">{{ t.income | currency('PKR') }}</span>
+            </div>
+            <div class="small d-flex justify-content-between mb-1">
+              <span class="text-muted">Expense:</span>
+              <span class="text-danger fw-semibold">{{ t.expense | currency('PKR') }}</span>
+            </div>
+            <div class="small d-flex justify-content-between border-top pt-1 mt-1">
+              <span class="text-muted">Net:</span>
+              <span class="fw-bold {% if t.net >= 0 %}text-primary{% else %}text-danger{% endif %}">{{ t.net | currency('PKR') }}</span>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <pre class="bg-light p-3 rounded mb-0">{{ sec.content }}</pre>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+{% endblock %}
+

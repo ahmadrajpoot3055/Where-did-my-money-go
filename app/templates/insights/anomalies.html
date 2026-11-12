@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+
+{% block title %}Spending Insights & Anomalies - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+  <div>
+    <h2 class="fw-bold mb-1">Unusual Spending & Anomaly Detection</h2>
+    <p class="text-muted small mb-0">Statistical outlier analysis highlights transactions that significantly deviate from your historical baselines</p>
+  </div>
+  <div>
+    <!-- Trigger Scan Button / Form -->
+    <form action="{{ url_for('insights.trigger_analysis') }}" method="POST" class="d-inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-warning fw-semibold d-flex align-items-center gap-2">
+        <i class="bi bi-play-circle-fill"></i> Run New Anomaly Scan
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Notice Banner -->
+<div class="alert alert-light border shadow-sm mb-4">
+  <div class="d-flex align-items-center gap-2">
+    <i class="bi bi-info-circle-fill text-primary fs-5"></i>
+    <div class="small text-muted">
+      <strong>Explainability Policy:</strong> Flagged records indicate <em>unusual activity for review</em> (such as single purchases far exceeding category medians), not confirmed fraud. Every finding includes an explanatory reason and allows human review.
+    </div>
+  </div>
+</div>
+
+<!-- Filter Tabs -->
+<ul class="nav nav-pills mb-3 gap-2">
+  <li class="nav-item">
+    <a class="nav-link {% if selected_status == 'New' %}active{% endif %}" href="{{ url_for('insights.anomalies', status='New') }}">
+      Pending Review
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if selected_status == 'Reviewed' %}active{% endif %}" href="{{ url_for('insights.anomalies', status='Reviewed') }}">
+      Reviewed
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if selected_status == 'All' %}active{% endif %}" href="{{ url_for('insights.anomalies', status='All') }}">
+      All Findings
+    </a>
+  </li>
+</ul>
+
+<!-- Findings Table -->
+<div class="card shadow-sm border-0 mb-4">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Date</th>
+          <th>Transaction Description</th>
+          <th>Category</th>
+          <th>Anomaly Score</th>
+          <th>Detection Reason</th>
+          <th>Status</th>
+          <th class="text-end">Amount</th>
+          <th class="text-end">Review Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in results %}
+        {% set t = r.transaction %}
+        <tr>
+          <td class="text-muted small text-nowrap">{{ t.transaction_date.strftime('%d %b %Y') }}</td>
+          <td>
+            <a href="{{ url_for('transactions.detail', transaction_id=t.id) }}" class="fw-semibold text-dark text-decoration-none">
+              {{ t.description_original }}
+            </a>
+          </td>
+          <td>
+            <span class="badge bg-light text-dark border">{{ t.category.name if t.category else 'Uncategorized' }}</span>
+          </td>
+          <td>
+            <span class="badge bg-danger-subtle text-danger fw-bold">
+              {{ (r.score * 100) | round(1) }}%
+            </span>
+          </td>
+          <td class="text-muted small" style="max-width: 320px;">
+            {{ r.reason }}
+          </td>
+          <td>
+            {% if r.status == 'New' %}
+              <span class="badge bg-warning-subtle text-warning border border-warning-subtle">Needs Review</span>
+            {% elif r.status == 'Expected' %}
+              <span class="badge bg-success-subtle text-success">Confirmed Expected</span>
+            {% elif r.status == 'Incorrect' %}
+              <span class="badge bg-secondary-subtle text-secondary">Dismissed</span>
+            {% else %}
+              <span class="badge bg-info-subtle text-info">{{ r.status }}</span>
+            {% endif %}
+          </td>
+          <td class="text-end fw-bold text-danger text-nowrap">
+            {{ t.amount | currency(t.currency_code) }}
+          </td>
+          <td class="text-end text-nowrap">
+            {% if r.status == 'New' %}
+            <form action="{{ url_for('insights.review_anomaly', result_id=r.id) }}" method="POST" class="d-inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="decision" value="Expected">
+              <button type="submit" class="btn btn-sm btn-outline-success" title="Mark Expected (Valid purchase)">
+                <i class="bi bi-check-lg"></i> Expected
+              </button>
+            </form>
+            <form action="{{ url_for('insights.review_anomaly', result_id=r.id) }}" method="POST" class="d-inline ms-1">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="decision" value="Incorrect">
+              <button type="submit" class="btn btn-sm btn-outline-secondary" title="Dismiss / Not Anomaly">
+                <i class="bi bi-x-lg"></i> Dismiss
+              </button>
+            </form>
+            {% else %}
+              <span class="text-muted small"><i class="bi bi-check2"></i> Reviewed</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" class="text-center py-5 text-muted">
+            <i class="bi bi-shield-check fs-2 text-success"></i>
+            <p class="mt-2 mb-0">No unusual spending patterns found for the selected view.</p>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+

@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block title %}Import Summary - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-4">
+  <div class="col-lg-7">
+    <div class="card shadow-sm border-0 text-center p-4">
+      <div class="mb-3">
+        <i class="bi bi-check-circle-fill text-success fs-1"></i>
+      </div>
+      <h3 class="fw-bold">Statement Import Completed</h3>
+      <p class="text-muted">Batch #{{ batch.id }} for file <strong>{{ batch.original_filename }}</strong></p>
+
+      <div class="row g-3 my-3">
+        <div class="col-4">
+          <div class="p-3 bg-light rounded border">
+            <div class="text-muted small">Total Processed</div>
+            <div class="fs-4 fw-bold">{{ batch.total_rows }}</div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="p-3 bg-success-subtle rounded border border-success-subtle">
+            <div class="text-success small fw-semibold">Imported</div>
+            <div class="fs-4 fw-bold text-success">{{ batch.accepted_rows }}</div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="p-3 bg-light rounded border">
+            <div class="text-muted small">Rejected</div>
+            <div class="fs-4 fw-bold {% if batch.rejected_rows > 0 %}text-danger{% else %}text-muted{% endif %}">{{ batch.rejected_rows }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-center gap-3 mt-4">
+        <a href="{{ url_for('transactions.index', account_id=batch.account_id) }}" class="btn btn-primary px-4">
+          <i class="bi bi-receipt me-2"></i> View Transactions
+        </a>
+        <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-outline-secondary px-4">
+          <i class="bi bi-speedometer2 me-2"></i> Open Dashboard
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

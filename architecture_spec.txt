@@ -1,0 +1,579 @@
+12. Entity Relationships and ER Overview
+The main ownership path is User → FinancialAccount → Transaction. Every private record must be traceable to one owner, directly or through a parent record. Global reference data such as standard AccountType values can be shared.
+User 1---* FinancialAccount *---1 AccountTypeUser 1---* ImportBatch 1---* ImportErrorFinancialAccount 1---* Transaction *---1 TransactionTypeTransaction *---1 TransactionStatusTransaction *---0..1 CategoryTransaction *---0..1 MerchantCategory 1---* SubcategoryMerchant 1---* MerchantAliasCategory 1---* CategoryRuleUser 1---* Budget 1---* BudgetItem *---1 CategoryUser 1---* SavingsGoal 1---* SavingsContributionUser 1---* AnalysisRun 1---* AnomalyResult *---1 TransactionAnomalyResult 1---* AnomalyReviewUser 1---* Subscription 1---* SubscriptionPayment *---1 TransactionUser 1---* SubscriptionDetectionUser 1---* Report 1---* ReportSectionUser 1---* NotificationUser 1---1 UserPreferenceUser 1---1 NotificationPreferenceUser 1---* LoginHistory / UserSession / PasswordReset / UserFeedback
+Association tables: TransactionTag is a many-to-many design. In SQLAlchemy, a `transaction_tag_links` association table is normally a physical database table but not necessarily a mapped class. If the instructor counts physical tables rather than mapped classes, include that association table in the database count and update the model inventory so the database has at least 40 physical tables. The final migration and database inspection must settle this count. Do not assume 40 Python classes automatically means exactly 40 physical tables.
+Recommended relationship conventions: use `back_populates` on both sides; use `lazy='selectin'` for collections where appropriate; avoid loading all transactions at once; use cascade behavior carefully. Add unique constraints for user email, user preference user_id, notification preference user_id, alias normalization where suitable, and composite uniqueness such as (budget_id, category_id).
+13. Transaction Categorization and ML Design
+13.1 Canonical input
+{  "transaction_date": "2026-11-03",  "description_original": "POS PURCHASE KFC DHA",  "amount": "1500.00",  "currency_code": "PKR",  "direction": "expense",  "reference": "optional bank reference"}
+13.2 Processing sequence
+Preserve the original description exactly as received (subject to safe length limits).
+Create normalized text: lowercase, trim, collapse whitespace, standardize common punctuation and remove irrelevant repeated codes only when safe.
+Try merchant alias matching. A recognized alias may provide a merchant and default category.
+Try user-specific and global category rules in a defined priority order.
+If no deterministic match exists, call the ML classifier.
+Store predicted category, confidence, method and model version where applicable.
+Apply a configurable decision policy: auto-suggest for high confidence, ask confirmation for medium confidence, and mark Uncategorized for low confidence.
+Store user confirmation/correction as reviewed feedback. Do not retrain immediately on every single edit; periodically create a validated training set and version a new model.
+13.3 Training data
+Training data should contain transaction description text and a human-confirmed category label. Do not train on synthetic labels that simply repeat the model's own guesses. A small class-balanced seed dataset can be manually prepared for the demo, then expanded using reviewed corrections.
+Example description
+Expected category
+Reason
+POS PURCHASE KFC DHA
+Food & Dining
+Recognized merchant alias
+SHELL PETROL STATION
+Transport
+Merchant/rule match
+NETFLIX.COM
+Subscriptions
+Merchant alias or recurring service
+CARREFOUR STORE
+Groceries
+Merchant alias
+ATM CASH WITHDRAWAL
+Cash Withdrawal
+Keyword rule
+TRANSFER ID 882917
+Uncategorized / ask user
+Insufficient meaning
+13.4 Model approach
+Baseline: TF-IDF vectorizer over normalized description text + LogisticRegression classifier.
+Compare a Multinomial Naive Bayes baseline if useful.
+Use a train/test split that avoids putting near-identical examples in both sets where possible.
+Evaluate with accuracy, macro F1, per-class precision/recall and confusion matrix; accuracy alone can hide weak minority categories.
+Persist the vectorizer and classifier together with a model version and training metadata.
+Never silently overwrite user-confirmed categories when a new model version is deployed.
+13.5 Confidence and explainability
+Use classifier probability only as a confidence estimate, not a guarantee. Calibrate probabilities if the application depends on them. Show a reason such as 'matched merchant alias', 'matched rule: Shell', or 'ML suggestion: Transport (0.78)'. Allow the user to override every suggestion.
+14. CSV/XLSX Import Design
+14.1 Supported canonical fields
+Canonical field
+Required?
+Notes
+transaction_date
+Yes
+Accept configured formats; reject impossible dates
+description
+Yes
+Trim; preserve original value
+amount
+Yes
+Decimal parsing; no NaN/Infinity
+direction
+Yes or inferable
+Income/expense/transfer; infer from debit/credit columns if mapping defines it
+currency_code
+Yes
+Default from account only when user confirms
+reference
+No
+Useful for duplicate detection
+merchant
+No
+May be inferred by alias matching
+14.2 Validation rules
+Allow only configured file extensions; set a maximum upload size.
+Use a random stored filename; never use user-provided filename as a filesystem path.
+Store files outside `static/` and serve only through an authenticated download route if needed.
+Check for empty files, missing columns, invalid encodings, unsupported date formats and malformed amounts.
+Reject or quarantine invalid rows with row numbers and human-readable reasons.
+Prevent formula injection when exporting user-controlled strings back to CSV/XLSX.
+Normalize debit/credit columns into a positive amount plus a transaction direction.
+Use Decimal arithmetic; never parse money through binary float where avoidable.
+Use database transactions for commit; rollback if a critical insert fails.
+Provide preview and confirmation before persistent insertion.
+14.3 Duplicate detection
+Use a layered duplicate check. Strongest signal: same account and bank reference. If no reference exists, compare account, date, amount, currency and normalized description. Similarity-based matching may flag candidates for review. Do not automatically delete a record merely because two rows look alike; legitimate repeated purchases can occur.
+14.4 Import states
+State
+Meaning
+Uploaded
+File accepted and batch created
+Processing
+Parser/normalizer is running
+Preview
+Rows parsed and awaiting user confirmation
+Completed
+All approved rows committed
+CompletedWithErrors
+Valid rows committed; invalid rows recorded
+Failed
+Import could not be safely processed
+15. Analytics and Business Logic
+Metric
+Definition / rule
+Total income
+Sum of completed income transactions in selected date range/account/currency
+Total expenses
+Sum of completed expense transactions in selected date range/account/currency
+Net cash flow
+Income − expenses; transfers excluded
+Savings rate
+(Income − expenses) / Income × 100, only when income > 0
+Category spending
+Sum of expense transactions grouped by category
+Month-over-month change
+(Current period − previous period) / previous period × 100; handle previous period = 0
+Budget remaining
+Budget limit − actual qualifying expenses
+Budget usage
+Actual qualifying expenses / budget limit × 100
+Savings goal progress
+Sum of contributions / target amount × 100
+Recurring candidate
+Repeated merchant/amount patterns with approximately regular date intervals
+Do not add amounts from different currencies into one total without an exchange-rate source and an explicit conversion policy. In the first release, filter or group totals by currency.
+16. Flask Routes and HTTP Methods
+Method
+Endpoint
+Purpose
+GET
+/
+Landing page
+GET, POST
+/auth/register
+Registration
+GET, POST
+/auth/login
+Sign-in
+POST
+/auth/logout
+Sign-out
+GET, POST
+/profile
+View/update profile
+GET
+/dashboard
+Dashboard with filters
+GET
+/accounts
+List own accounts
+GET, POST
+/accounts/new
+Create account
+GET, POST
+/accounts/<int:account_id>/edit
+Edit own account
+POST
+/accounts/<int:account_id>/archive
+Archive account
+GET
+/transactions
+List/search/filter own transactions
+GET, POST
+/transactions/new
+Create transaction
+GET
+/transactions/<int:transaction_id>
+Transaction detail
+GET, POST
+/transactions/<int:transaction_id>/edit
+Edit transaction
+POST
+/transactions/<int:transaction_id>/delete
+Delete/soft-delete transaction
+GET, POST
+/imports/new
+Upload statement
+GET
+/imports/<int:batch_id>/preview
+Preview import
+POST
+/imports/<int:batch_id>/confirm
+Commit approved rows
+GET
+/imports/<int:batch_id>
+Import summary
+GET, POST
+/budgets/new
+Create budget
+GET
+/budgets
+List budgets
+GET, POST
+/goals/new
+Create savings goal
+GET
+/insights/anomalies
+List anomaly results
+POST
+/insights/anomalies/<int:result_id>/review
+Review anomaly
+GET
+/subscriptions
+List recurring payments
+POST
+/subscriptions/detections/<int:id>/confirm
+Confirm recurring candidate
+GET, POST
+/reports/new
+Generate report
+GET
+/reports/<int:report_id>/download
+Authenticated report download
+GET
+/notifications
+List notifications
+POST
+/notifications/<int:id>/read
+Mark notification read
+GET, POST
+/admin/categories
+Admin category management
+GET, POST
+/admin/merchants
+Admin merchant management
+Use GET for reading pages and POST for state changes. For edit forms, GET displays the form and POST validates/saves it. Use POST for delete/archive actions. After successful POST, redirect to a GET route (PRG). Use route converters such as <int:id> and return 404/403 appropriately.
+17. Forms, Validation, Sessions and Security
+17.1 Server-side validation
+Validate every submitted field on the server even if HTML required/min/max attributes exist.
+Check email format and uniqueness; normalize case/whitespace.
+Check amount is finite, positive and within configured limits.
+Check transaction date and budget period boundaries.
+Check referenced account/category/merchant belongs to the user or is approved global data.
+Check uploaded file type, size, columns and row count.
+Return field-specific errors and preserve safe form values after validation failure.
+Never trust hidden form fields for user_id, ownership, price or role.
+17.2 Sessions and cookies
+Use Flask's signed session cookie for authenticated session state; do not put financial records or secrets in the cookie.
+Set a long random SECRET_KEY in environment variables.
+Enable SESSION_COOKIE_HTTPONLY and SESSION_COOKIE_SAMESITE='Lax'; set SESSION_COOKIE_SECURE=True under HTTPS.
+Use CSRF protection on all state-changing forms.
+Regenerate or clear session state at authentication boundaries as supported by the chosen session implementation.
+Do not store passwords, bank credentials, raw reset tokens or API secrets in sessions.
+17.3 Security baseline
+Use Werkzeug password hashing; never store plaintext passwords.
+Use SQLAlchemy parameterized queries; avoid string-built SQL.
+Enforce ownership in every object lookup and service method.
+Use Jinja autoescaping; do not mark untrusted text as safe HTML.
+Protect against CSRF, XSS, SQL injection, path traversal and unsafe file uploads.
+Limit login/reset attempts and use generic login error messages to reduce account enumeration.
+Use HTTPS in deployment and keep secrets out of source control.
+Back up database and private uploads securely; define retention/deletion policy.
+Do not collect bank login credentials, card PINs, OTPs or CVVs.
+17.4 Post-Redirect-Get (PRG)
+@bp.route("/transactions/new", methods=["GET", "POST"])@login_requireddef create_transaction():    form = TransactionForm()    if form.validate_on_submit():        transaction_service.create_for_user(            user=current_user,            form_data=form.data        )        flash("Transaction saved successfully.", "success")        return redirect(url_for("transactions.list_transactions"))    return render_template("transactions/new.html", form=form)
+The redirect after successful POST prevents accidental duplicate submissions when the user refreshes the page. It does not replace duplicate detection for imported bank rows.
+18. User Interface and Template Plan
+Page
+Main content
+Landing
+Project explanation, feature overview, register/sign-in actions
+Register/Login
+Validated forms and clear errors
+Dashboard
+KPI cards, monthly trend, category chart, recent activity, review alerts
+Accounts
+Account list, add/edit/archive, account balance context
+Transactions
+Search, filters, pagination, category status and CRUD actions
+Import wizard
+Upload → map columns → preview → confirm → summary
+Transaction detail
+Original description, category suggestion, notes, tags, splits and attachments
+Budgets
+Budget cards, category progress and alerts
+Savings goals
+Goal target, contributions and progress
+Insights
+Anomaly candidates and recurring-payment candidates
+Reports
+Report generation history and authenticated download
+Notifications
+Unread/read list and preferences
+Admin
+Global categories, merchant aliases, import templates and user-role administration
+Template inheritance: `base.html` contains the common HTML structure, navigation, flash-message region and footer. Feature pages extend it with `{% extends 'base.html' %}` and fill named blocks. Use Jinja loops for lists and conditionals for empty/error states. Do not duplicate the full navigation/header across pages.
+19. CRUD Coverage Plan
+The rubric expects all four CRUD operations across the schema, not merely a database that can be created. Implement and test Create, Read, Update and Delete/archive operations for the main user-managed entities.
+Entity group
+Create
+Read
+Update
+Delete / archive
+Accounts
+Create account
+List/detail own accounts
+Edit name/type/status
+Archive; prevent deleting account with history
+Transactions
+Manual/import
+List/detail/filter
+Edit category/description/date/amount
+Soft-delete or void with audit policy
+Categories
+User category
+List category tree
+Rename/change status
+Restrict deletion if transactions reference it
+Budgets
+Create budget/items
+List/detail/progress
+Change limits/dates
+Archive budget
+Savings goals
+Create goal/contribution
+List/detail/progress
+Edit goal/status
+Remove erroneous contribution with audit
+Merchant aliases/rules
+Add mapping/rule
+List/search
+Edit pattern/category
+Deactivate/delete with permission
+Subscriptions
+Confirm candidate/manual
+List/detail/payments
+Edit expected amount/frequency
+Cancel/archive
+Reports/notifications
+Generate/create
+List/detail
+Mark read/update preference
+Delete if retention policy allows
+For lookup and audit tables, CRUD may be restricted to administrators or append-only by design. Document those rules rather than exposing unsafe delete controls.
+20. Testing Strategy
+20.1 Unit tests
+Money calculations and savings-rate edge cases.
+Date parsing for supported bank formats.
+Description normalization and merchant alias matching.
+Rule priority and category selection.
+ML preprocessing, model loading and low-confidence behavior.
+Duplicate matching logic.
+Budget usage and threshold calculation.
+Recurring interval detection.
+20.2 Integration tests
+Registration rejects duplicate email and stores password hash.
+Login/logout and protected routes behave correctly.
+User A cannot view/edit/delete User B's accounts, transactions, reports or attachments.
+Create/read/update/delete flows work for core entities.
+CSV import preview catches malformed rows and commit stores only approved valid rows.
+Import rollback leaves no partial batch of transactions when a critical failure occurs.
+Dashboard totals match a known fixture dataset.
+CSRF validation is active on state-changing forms.
+Flash messages and PRG redirects work.
+20.3 Acceptance demo dataset
+Prepare a fictional dataset with at least 30–50 transactions across 2–3 months, multiple categories, several known merchants, at least 5 unfamiliar descriptions, repeated subscription-like payments, one large unusual expense, a duplicate row and a malformed row. Never use a real person's bank statement in a public demo.
+20.4 Database verification
+# Flask shell or Python contextfrom sqlalchemy import inspectinspector = inspect(db.engine)table_names = inspector.get_table_names()print("Physical table count:", len(table_names))print(sorted(table_names))
+Before submission, verify that the migrated database contains at least 40 physical tables and that all expected foreign keys are present. If the association table for tags is included in the database, count it explicitly. The safest implementation is to design at least 41 physical tables if there is any ambiguity about how the marker counts the many-to-many association table.
+21. Setup and Installation
+21.1 Prerequisites
+Python 3.11+ (or the version approved by the instructor).
+pip and venv.
+Git (recommended).
+SQLite for local setup; MySQL server only if using MySQL.
+21.2 Create environment
+# Windows PowerShellpy -m venv .venv.\.venv\Scripts\Activate.ps1# Windows CMDpy -m venv .venv.venv\Scripts\activate.bat# Install dependenciespip install -r requirements.txt
+21.3 Suggested requirements.txt
+FlaskFlask-SQLAlchemyFlask-MigrateFlask-WTFemail-validatorpython-dotenvWerkzeugpandasopenpyxlnumpyscikit-learnjoblibmatplotlibreportlabpytest
+Pin tested dependency versions before final submission (for example, generate a lock/frozen requirements file after the application is working).
+21.4 Environment example
+FLASK_APP=run.pyFLASK_ENV=developmentSECRET_KEY=replace-with-a-long-random-secretDATABASE_URL=sqlite:///finance_app.dbMAX_CONTENT_LENGTH=10485760UPLOAD_FOLDER=private_uploads
+21.5 Database initialization
+flask db initflask db migrate -m "initial schema"flask db upgrade# Run development serverflask run
+Run migrations after defining all models and importing model modules so Alembic can discover their metadata. Do not rely on `db.create_all()` as the only schema management approach for a project that will evolve.
+22. Configuration and Environment Variables
+Variable
+Purpose
+Example / guidance
+SECRET_KEY
+Signs Flask session and CSRF data
+Long random secret; never commit real value
+DATABASE_URL
+Database connection string
+sqlite:///finance_app.db or MySQL URI
+MAX_CONTENT_LENGTH
+Maximum upload size
+10 MiB example; choose a suitable limit
+UPLOAD_FOLDER
+Private upload directory
+Outside static/
+SESSION_COOKIE_SECURE
+HTTPS-only cookie
+True in production
+SESSION_COOKIE_HTTPONLY
+Prevent JavaScript reading session cookie
+True
+SESSION_COOKIE_SAMESITE
+Cross-site cookie policy
+Lax
+MODEL_DIR
+ML artifact directory
+Private, versioned path
+REPORT_FOLDER
+Generated reports directory
+Private storage
+23. Deployment Notes
+Use a production WSGI server (for example Gunicorn on Linux or a suitable Windows production server), not Flask's development server.
+Use HTTPS and secure cookie settings.
+Use MySQL or PostgreSQL for a multi-user production deployment; SQLite is suitable for a small local demo.
+Set secrets through hosting environment variables.
+Run migrations during deployment in a controlled release step.
+Keep uploaded statements, attachments, reports and ML artifacts outside the public static directory.
+Restrict file permissions and configure backups.
+Add structured error logging that excludes passwords, tokens and unnecessary transaction details.
+Set DEBUG=False in production.
+Use a background task queue only if imports/reports become too slow for a normal request; it is optional for the university prototype.
+24. Development Roadmap
+Phase
+Work
+Deliverable / exit condition
+1. Foundation
+Create venv, requirements, app factory, config, extensions, base template
+Application starts; README setup works
+2. Database
+Implement all model classes, relationships, constraints and migrations
+At least 40 physical related tables; seed lookup values
+3. Authentication
+Registration, login, logout, role checks, profile and preferences
+Protected pages and ownership tests pass
+4. Core finance
+Accounts and transaction CRUD, categories, merchants
+Manual transaction workflow works
+5. Importer
+CSV/XLSX upload, mappings, validation, preview, duplicate review, commit
+Sample statement imports correctly
+6. Categorization
+Merchant aliases, rules, ML classifier, correction workflow
+Known and unknown examples handled transparently
+7. Analytics
+Dashboard, category totals, trends, budgets and savings goals
+Totals match test dataset
+8. Intelligence
+Anomaly review and recurring-payment candidates
+Findings explainable and user-reviewable
+9. Reports/admin
+PDF/CSV reports, notifications, admin reference management
+Download and admin authorization tests pass
+10. Hardening
+Security review, test suite, README, demo data and final rubric audit
+Clean end-to-end demo without errors
+Do not start by coding all screens at once. First stabilize the model relationships and a small vertical slice: register → create account → add transaction → show dashboard. Then add imports and intelligence.
+25. Acceptance Criteria
+☐ Application starts from documented setup steps on a clean environment.
+☐ requirements.txt is present and contains required dependencies.
+☐ Application uses a clear Flask project structure and multiple single-purpose routes.
+☐ Jinja2 template inheritance is used consistently.
+☐ At least 40 related physical database tables exist after migrations; models have meaningful columns, constraints and relationships.
+☐ Core CRUD works and is tested.
+☐ Forms use server-side validation beyond browser-only HTML validation.
+☐ Sessions/cookies are configured appropriately; CSRF protection is enabled.
+☐ Flash messages communicate success and failure.
+☐ POST actions use Post-Redirect-Get where appropriate.
+☐ CSV/XLSX importer supports preview, validation, row errors and duplicate review.
+☐ Categorization clearly distinguishes merchant/rule/ML/manual outcomes and permits correction.
+☐ Dashboard metrics are correct for known test data and avoid counting transfers as income/expenses.
+☐ Anomaly results are described as unusual activity, not confirmed fraud.
+☐ Users cannot access another user's private records.
+☐ README documents installation, environment variables, database migration, seed data and run commands.
+☐ Demo can be completed without any real bank API connection or real banking credentials.
+26. Risks and Limitations
+Risk
+Impact
+Mitigation
+Different bank statement formats
+Import may fail or misread columns
+Mapping wizard, preview, test fixtures and row-level errors
+Unclear transaction descriptions
+Wrong category prediction
+Uncategorized state, user confirmation, merchant alias feedback
+Small ML dataset
+Poor classifier generalization
+Start with rules/aliases, collect reviewed labels, report evaluation metrics
+False anomaly alerts
+User loses trust
+Explain reason, let user review, tune thresholds on personal history
+Duplicate-looking purchases
+Legitimate records may be flagged
+Flag for review; do not auto-delete
+Sensitive financial data exposure
+Privacy and security harm
+Ownership checks, private storage, encryption/HTTPS, least privilege, retention policy
+40-table requirement misunderstood
+Rubric deduction
+Count physical tables after migration; document mapped classes and association tables
+External API unavailable
+Cannot deliver live bank sync
+CSV/manual input is the complete first-release path
+27. Glossary
+Term
+Meaning
+API
+A defined interface that lets two software systems exchange data.
+CSV
+Comma-separated values file commonly used for spreadsheet data.
+CRUD
+Create, Read, Update and Delete database operations.
+Foreign key
+A column that references a primary/unique key in another table.
+ORM
+Object-Relational Mapper; maps Python classes to database tables.
+SQLAlchemy
+Python ORM and SQL toolkit used to define models and query relational data.
+Jinja2
+Template engine used by Flask to render dynamic HTML.
+Blueprint
+Flask mechanism for grouping routes and related application functionality.
+PRG
+Post-Redirect-Get pattern: after successful POST, redirect to a GET page.
+TF-IDF
+Text feature weighting method used to represent transaction descriptions for ML.
+Logistic Regression
+A supervised classification algorithm that can predict transaction categories.
+Confidence
+A model's estimated support for a prediction; not a guarantee of correctness.
+Anomaly
+An observation that differs from a learned or defined normal pattern; not necessarily fraud.
+Migration
+A versioned database schema change.
+Seed data
+Initial controlled rows such as roles, transaction types and default categories.
+Appendix A — Important Implementation Decisions
+Bank connection: not required for first release. CSV/XLSX and manual entry are the supported input methods.
+Money: use Numeric/Decimal and store currency code. Do not aggregate currencies without conversion.
+Transactions: store original description and normalized description separately.
+Categorization: merchant match → rules → ML → user review. Uncategorized is a valid result.
+ML: train only on reviewed labels; preserve model version and prediction metadata.
+Anomalies: alert for review, never claim confirmed fraud.
+Privacy: no bank passwords, PINs, OTPs or CVVs.
+Database: verify physical table count after migration. If the tag association table is counted separately, ensure the schema still meets the 40-table minimum.
+CRUD: provide working Create, Read, Update and Delete/archive paths; lookup tables may have admin-only CRUD.
+Documentation: keep README concise for setup; this technical document is the full system blueprint.
+Appendix B — Suggested Demo Scenario
+Register a demo user and sign in.
+Create two accounts: Main Bank (PKR) and Cash Wallet (PKR).
+Upload a fictional statement containing income, grocery, food, transport and subscription transactions.
+Map the statement's columns and inspect the preview.
+Show one invalid row and one probable duplicate.
+Confirm the valid import.
+Open transactions and show merchant/rule/ML category suggestions.
+Correct an Uncategorized transaction and show the correction saved.
+Open dashboard and verify income, expense and category totals.
+Create a Food budget and show its progress.
+Run anomaly analysis and review one unusually large transaction.
+Show a recurring-payment candidate and confirm or reject it.
+Generate and download a monthly report.
+Demonstrate that a second user cannot open the first user's transaction URL.
+Appendix C — Rubric Alignment
+Rubric area
+How this project demonstrates it
+Project setup & structure
+Virtual environment, requirements.txt, application factory, blueprints and organized folders
+Routing & view functions
+Multiple routes, correct GET/POST use, path converters and single-purpose views
+Templates & Jinja2
+Shared base template, inheritance, blocks, loops, conditionals and flash-message display
+Database integration & CRUD
+40+ related physical tables, SQLAlchemy relationships, migrations, constraints and CRUD workflows
+Forms, validation, cookies & sessions
+Server-side validation, CSRF, secure sessions/cookies, flash messages and PRG
+Code quality & organization
+Models/services/blueprints separation, readable naming and limited duplication
+Functionality & testing
+End-to-end workflows, test fixtures, access-control and import tests
+Documentation
+This technical specification plus README setup/run instructions
+The rubric's 40-table minimum is a hard submission requirement. The top database band also expects appropriate columns, constraints, meaningful relationships and all four CRUD operations working across the schema; table count alone is not enough.

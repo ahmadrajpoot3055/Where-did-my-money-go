@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit Transaction #{{ tx.id }} - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="card shadow-sm border-0">
+      <div class="card-header bg-white py-3 border-bottom">
+        <h5 class="mb-0 fw-bold"><i class="bi bi-pencil-square text-primary me-2"></i>Edit Transaction #{{ tx.id }}</h5>
+      </div>
+      <div class="card-body p-4">
+        <form method="POST" novalidate>
+          {{ form.hidden_tag() }}
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              {{ form.account_id.label(class="form-label fw-semibold") }}
+              {{ form.account_id(class="form-select") }}
+            </div>
+            <div class="col-md-6">
+              {{ form.transaction_date.label(class="form-label fw-semibold") }}
+              {{ form.transaction_date(class="form-control" + (" is-invalid" if form.transaction_date.errors else "")) }}
+              {% for error in form.transaction_date.errors %}
+                <div class="invalid-feedback">{{ error }}</div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="mb-3">
+            {{ form.description.label(class="form-label fw-semibold") }}
+            {{ form.description(class="form-control" + (" is-invalid" if form.description.errors else "")) }}
+            {% for error in form.description.errors %}
+              <div class="invalid-feedback">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              {{ form.amount.label(class="form-label fw-semibold") }}
+              {{ form.amount(class="form-control" + (" is-invalid" if form.amount.errors else "")) }}
+              {% for error in form.amount.errors %}
+                <div class="invalid-feedback">{{ error }}</div>
+              {% endfor %}
+            </div>
+            <div class="col-md-6">
+              {{ form.transaction_type_id.label(class="form-label fw-semibold") }}
+              {{ form.transaction_type_id(class="form-select") }}
+            </div>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              {{ form.category_id.label(class="form-label fw-semibold") }}
+              {{ form.category_id(class="form-select") }}
+              <div class="form-text">Changing the category manually marks this transaction as human-reviewed.</div>
+            </div>
+            <div class="col-md-6">
+              {{ form.reference.label(class="form-label fw-semibold") }}
+              {{ form.reference(class="form-control") }}
+            </div>
+          </div>
+
+          <div class="mb-4">
+            {{ form.tags.label(class="form-label fw-semibold") }}
+            {{ form.tags(class="form-control", placeholder="Tags separated by commas") }}
+          </div>
+
+          <div class="d-flex justify-content-between pt-3 border-top">
+            <a href="{{ url_for('transactions.detail', transaction_id=tx.id) }}" class="btn btn-outline-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary px-4">Update Transaction</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

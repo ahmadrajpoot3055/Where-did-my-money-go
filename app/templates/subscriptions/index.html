@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+
+{% block title %}Recurring Subscriptions - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+  <div>
+    <h2 class="fw-bold mb-1">Recurring Payments & Subscriptions</h2>
+    <p class="text-muted small mb-0">Detect, track, and audit ongoing recurring commitments reducing your cash flow</p>
+  </div>
+  <div class="d-flex gap-2">
+    <form action="{{ url_for('subscriptions.scan') }}" method="POST" class="d-inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-primary d-flex align-items-center gap-2">
+        <i class="bi bi-search"></i> Scan for Recurring Patterns
+      </button>
+    </form>
+    <a href="{{ url_for('subscriptions.new') }}" class="btn btn-primary d-flex align-items-center gap-2">
+      <i class="bi bi-plus-lg"></i> Add Subscription
+    </a>
+  </div>
+</div>
+
+<!-- Candidate Detections Alert Section if any -->
+{% if detections %}
+<div class="card shadow-sm border-0 border-start border-primary border-4 mb-4">
+  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+    <h6 class="mb-0 fw-bold text-primary"><i class="bi bi-magic me-2"></i>Automated Recurring Detection Candidates ({{ detections | length }})</h6>
+    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Review Needed</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Detected Pattern / Merchant</th>
+          <th>Estimated Frequency</th>
+          <th>Confidence</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in detections %}
+        <tr>
+          <td>
+            <div class="fw-bold">{{ d.candidate_name }}</div>
+            {% if d.merchant %}<div class="text-muted small">{{ d.merchant.name }}</div>{% endif %}
+          </td>
+          <td><span class="badge bg-light text-dark border">{{ d.frequency_guess }}</span></td>
+          <td>
+            <span class="badge bg-success-subtle text-success">
+              {{ (d.confidence * 100) | round(0) }}% confidence
+            </span>
+          </td>
+          <td class="text-end">
+            <form action="{{ url_for('subscriptions.confirm_detection', id=d.id) }}" method="POST" class="d-inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-success">
+                <i class="bi bi-check2"></i> Confirm Subscription
+              </button>
+            </form>
+            <form action="{{ url_for('subscriptions.reject_detection', id=d.id) }}" method="POST" class="d-inline ms-1">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-light border text-muted">
+                <i class="bi bi-x"></i> Dismiss
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Monthly Estimated Outflow Card -->
+<div class="row mb-4">
+  <div class="col-md-4">
+    <div class="card shadow-sm border-0 p-3 bg-white">
+      <div class="text-muted small text-uppercase fw-semibold">Estimated Monthly Commitment</div>
+      <div class="fs-2 fw-bold text-dark mt-1">{{ total_monthly_est | currency('PKR') }}</div>
+      <div class="text-muted small">Total recurring expenses across active subscriptions</div>
+    </div>
+  </div>
+</div>
+
+<!-- Active Subscriptions Table -->
+<div class="card shadow-sm border-0 mb-4">
+  <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+    <h6 class="mb-0 fw-bold"><i class="bi bi-arrow-repeat text-primary me-2"></i>Active Subscriptions ({{ active_subs | length }})</h6>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Service / Subscription</th>
+          <th>Frequency</th>
+          <th>Next Expected Date</th>
+          <th>Linked Payments</th>
+          <th class="text-end">Expected Amount</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in active_subs %}
+        <tr>
+          <td>
+            <div class="fw-semibold">{{ s.name }}</div>
+            {% if s.merchant %}<div class="text-muted small">{{ s.merchant.name }}</div>{% endif %}
+          </td>
+          <td><span class="badge bg-light text-dark border">{{ s.frequency }}</span></td>
+          <td class="text-muted small">
+            {{ s.next_expected_date.strftime('%d %b %Y') if s.next_expected_date else 'Not set' }}
+          </td>
+          <td>
+            <span class="badge bg-light text-muted border">{{ s.payments | length }} transactions linked</span>
+          </td>
+          <td class="text-end fw-bold text-dark">
+            {{ s.expected_amount | currency(s.currency_code) }}
+          </td>
+          <td class="text-end">
+            <form action="{{ url_for('subscriptions.cancel', id=s.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Cancel this subscription?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-outline-danger">Cancel</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" class="text-center py-5 text-muted">
+            <i class="bi bi-arrow-repeat fs-2"></i>
+            <p class="mt-2 mb-0">No active subscriptions registered.</p>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+

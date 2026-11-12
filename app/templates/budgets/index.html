@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+
+{% block title %}Budgets - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Expense Budgets</h2>
+    <p class="text-muted small mb-0">Set category limits, monitor spending progress, and receive threshold alerts</p>
+  </div>
+  <a href="{{ url_for('budgets.new') }}" class="btn btn-primary d-flex align-items-center gap-2">
+    <i class="bi bi-plus-lg"></i> Create New Budget
+  </a>
+</div>
+
+<div class="row g-4">
+  {% for bdata in budget_data %}
+  {% set b = bdata.budget %}
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+        <div>
+          <span class="badge bg-primary-subtle text-primary border border-primary-subtle text-uppercase mb-1">{{ b.period_type }}</span>
+          <h5 class="fw-bold mb-0">{{ b.name }}</h5>
+          <div class="text-muted small">{{ b.start_date.strftime('%d %b %Y') }} &ndash; {{ b.end_date.strftime('%d %b %Y') }}</div>
+        </div>
+        <div class="text-end">
+          <div class="fs-5 fw-bold {% if bdata.overall_pct >= 100 %}text-danger{% elif bdata.overall_pct >= 80 %}text-warning{% else %}text-success{% endif %}">
+            {{ bdata.overall_pct }}% Used
+          </div>
+          <span class="text-muted small">{{ bdata.total_spent | currency(b.currency_code) }} of {{ bdata.total_limit | currency(b.currency_code) }}</span>
+        </div>
+      </div>
+      <div class="card-body p-4">
+        <!-- Progress Bar -->
+        <div class="progress mb-4" style="height: 10px;">
+          <div class="progress-bar {% if bdata.overall_pct >= 100 %}bg-danger{% elif bdata.overall_pct >= 80 %}bg-warning{% else %}bg-primary{% endif %}"
+               role="progressbar"
+               style="width: {{ [bdata.overall_pct, 100] | min }}%;">
+          </div>
+        </div>
+
+        <h6 class="fw-bold text-muted small text-uppercase mb-3">Category Limits Breakdown</h6>
+        <div class="d-flex flex-column gap-3">
+          {% for item in bdata.items %}
+          <div>
+            <div class="d-flex justify-content-between align-items-center small mb-1">
+              <span class="fw-semibold">{{ item.item.category.name }}</span>
+              <span class="text-muted">
+                {{ item.spent | currency(b.currency_code) }} / {{ item.item.limit_amount | currency(b.currency_code) }}
+                <strong class="{% if item.percent >= 100 %}text-danger{% elif item.percent >= item.item.warning_percent %}text-warning{% else %}text-dark{% endif %} ms-1">
+                  ({{ item.percent }}%)
+                </strong>
+              </span>
+            </div>
+            <div class="progress" style="height: 6px;">
+              <div class="progress-bar {% if item.percent >= 100 %}bg-danger{% elif item.percent >= item.item.warning_percent %}bg-warning{% else %}bg-success{% endif %}"
+                   style="width: {{ [item.percent, 100] | min }}%;">
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="card-footer bg-white border-top py-3 d-flex justify-content-between align-items-center">
+        <a href="{{ url_for('budgets.detail', budget_id=b.id) }}" class="btn btn-sm btn-outline-primary">
+          <i class="bi bi-gear me-1"></i> Manage Limits
+        </a>
+        <form action="{{ url_for('budgets.archive', budget_id=b.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Change status of this budget?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-sm btn-light border text-danger">
+            <i class="bi bi-archive me-1"></i> {{ 'Archive' if b.is_active else 'Restore' }}
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="col-12 text-center py-5">
+    <i class="bi bi-pie-chart fs-1 text-muted"></i>
+    <h5 class="mt-3 fw-bold">No Budgets Defined</h5>
+    <p class="text-muted">Create a monthly or custom budget to cap expenses and receive proactive alerts.</p>
+    <a href="{{ url_for('budgets.new') }}" class="btn btn-primary px-4">Create Your First Budget</a>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
+

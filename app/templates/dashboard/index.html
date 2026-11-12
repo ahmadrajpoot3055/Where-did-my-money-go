@@ -1,0 +1,364 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+  <div>
+    <h2 class="fw-bold mb-1">Financial Intelligence Dashboard</h2>
+    <p class="text-muted small mb-0">Overview of income, expenses, cash flow, and spending behavior</p>
+  </div>
+
+  <!-- Filter Form -->
+  <form method="GET" action="{{ url_for('dashboard.dashboard') }}" class="d-flex flex-wrap align-items-center gap-2">
+    <select name="account_id" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+      <option value="">All Accounts</option>
+      {% for a in accounts %}
+        <option value="{{ a.id }}" {% if selected_account_id == a.id %}selected{% endif %}>{{ a.name }}</option>
+      {% endfor %}
+    </select>
+
+    <select name="period" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+      <option value="this_month" {% if selected_period == 'this_month' %}selected{% endif %}>This Month</option>
+      <option value="last_30_days" {% if selected_period == 'last_30_days' %}selected{% endif %}>Last 30 Days</option>
+      <option value="this_year" {% if selected_period == 'this_year' %}selected{% endif %}>This Year</option>
+      <option value="custom" {% if selected_period == 'custom' %}selected{% endif %}>Custom Range</option>
+    </select>
+
+    {% if selected_period == 'custom' %}
+      <input type="date" name="start_date" class="form-control form-control-sm" value="{{ start_date }}" style="width: auto;">
+      <input type="date" name="end_date" class="form-control form-control-sm" value="{{ end_date }}" style="width: auto;">
+      <button type="submit" class="btn btn-sm btn-primary">Apply</button>
+    {% endif %}
+  </form>
+</div>
+
+<!-- Pending Review Banners -->
+{% if pending_anomalies > 0 or pending_subs > 0 %}
+<div class="row g-3 mb-4">
+  {% if pending_anomalies > 0 %}
+  <div class="col-md-6">
+    <div class="alert alert-warning border-warning d-flex justify-content-between align-items-center mb-0 p-3 shadow-sm">
+      <div class="d-flex align-items-center gap-3">
+        <i class="bi bi-exclamation-diamond-fill text-warning fs-3"></i>
+        <div>
+          <h6 class="mb-0 fw-bold">Unusual Spending Detected</h6>
+          <span class="small text-muted">{{ pending_anomalies }} transaction(s) flagged for review</span>
+        </div>
+      </div>
+      <a href="{{ url_for('insights.anomalies') }}" class="btn btn-sm btn-warning fw-semibold">Review Findings</a>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if pending_subs > 0 %}
+  <div class="col-md-6">
+    <div class="alert alert-info border-info d-flex justify-content-between align-items-center mb-0 p-3 shadow-sm">
+      <div class="d-flex align-items-center gap-3">
+        <i class="bi bi-arrow-repeat text-info fs-3"></i>
+        <div>
+          <h6 class="mb-0 fw-bold">Recurring Payments Identified</h6>
+          <span class="small text-muted">{{ pending_subs }} subscription candidate(s) detected</span>
+        </div>
+      </div>
+      <a href="{{ url_for('subscriptions.index') }}" class="btn btn-sm btn-info text-white fw-semibold">Review Subscriptions</a>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- KPI Metric Cards -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl-3">
+    <div class="card kpi-card p-3 bg-white h-100">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="kpi-title">Total Income</div>
+          <div class="kpi-value text-success">{{ kpis.total_income | currency(currency_code) }}</div>
+        </div>
+        <div class="p-2 bg-success-subtle text-success rounded-3">
+          <i class="bi bi-arrow-down-left-circle fs-4"></i>
+        </div>
+      </div>
+      <div class="text-muted small mt-2">
+        <i class="bi bi-calendar-check me-1"></i> Active period receipts
+      </div>
+    </div>
+  </div>
+
+  <div class="col-sm-6 col-xl-3">
+    <div class="card kpi-card p-3 bg-white h-100">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="kpi-title">Total Expenses</div>
+          <div class="kpi-value text-danger">{{ kpis.total_expense | currency(currency_code) }}</div>
+        </div>
+        <div class="p-2 bg-danger-subtle text-danger rounded-3">
+          <i class="bi bi-arrow-up-right-circle fs-4"></i>
+        </div>
+      </div>
+      <div class="small mt-2">
+        {% if kpis.mom_expense_change is not none %}
+          <span class="{% if kpis.mom_expense_change > 0 %}text-danger{% else %}text-success{% endif %} fw-semibold">
+            <i class="bi bi-arrow-{% if kpis.mom_expense_change > 0 %}up{% else %}down{% endif %}"></i>
+            {{ kpis.mom_expense_change }}%
+          </span>
+          <span class="text-muted">vs previous period</span>
+        {% else %}
+          <span class="text-muted"><i class="bi bi-info-circle me-1"></i> Categorized spending</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-sm-6 col-xl-3">
+    <div class="card kpi-card p-3 bg-white h-100">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="kpi-title">Net Cash Flow</div>
+          <div class="kpi-value {% if kpis.net_cash_flow >= 0 %}text-primary{% else %}text-danger{% endif %}">
+            {{ kpis.net_cash_flow | currency(currency_code) }}
+          </div>
+        </div>
+        <div class="p-2 bg-primary-subtle text-primary rounded-3">
+          <i class="bi bi-cash-stack fs-4"></i>
+        </div>
+      </div>
+      <div class="text-muted small mt-2">
+        Income minus actual expenses
+      </div>
+    </div>
+  </div>
+
+  <div class="col-sm-6 col-xl-3">
+    <div class="card kpi-card p-3 bg-white h-100">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="kpi-title">Savings Rate</div>
+          <div class="kpi-value {% if kpis.savings_rate and kpis.savings_rate > 20 %}text-success{% elif kpis.savings_rate and kpis.savings_rate > 0 %}text-warning{% else %}text-muted{% endif %}">
+            {% if kpis.savings_rate is not none %}{{ kpis.savings_rate }}%{% else %}N/A{% endif %}
+          </div>
+        </div>
+        <div class="p-2 bg-info-subtle text-info rounded-3">
+          <i class="bi bi-piggy-bank fs-4"></i>
+        </div>
+      </div>
+      <div class="text-muted small mt-2">
+        Target: &gt; 20% of net income
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts Section -->
+<div class="row g-4 mb-4">
+  <!-- Chart 1: Category Breakdown -->
+  <div class="col-lg-5">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-pie-chart text-primary me-2"></i>Spending by Category</h6>
+        <span class="badge bg-light text-muted border">{{ category_breakdown | length }} Categories</span>
+      </div>
+      <div class="card-body d-flex flex-column justify-content-center">
+        {% if category_breakdown %}
+        <div style="max-height: 280px; position: relative;">
+          <canvas id="categoryChart"></canvas>
+        </div>
+        <div class="mt-3 table-responsive" style="max-height: 140px; overflow-y: auto;">
+          <table class="table table-sm table-borderless small mb-0">
+            <tbody>
+              {% for c in category_breakdown[:5] %}
+              <tr>
+                <td><span class="fw-medium">{{ c.category }}</span></td>
+                <td class="text-muted">{{ c.percentage }}%</td>
+                <td class="text-end fw-semibold">{{ c.amount | currency(currency_code) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+          <i class="bi bi-inbox fs-1"></i>
+          <p class="mt-2 mb-0">No expense transactions recorded in this period.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Chart 2: 6-Month Income vs Expense Trend -->
+  <div class="col-lg-7">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-graph-up text-primary me-2"></i>Cash Flow Trend (Last 6 Months)</h6>
+        <span class="badge bg-light text-muted border">Monthly Comparison</span>
+      </div>
+      <div class="card-body">
+        <div style="height: 320px; position: relative;">
+          <canvas id="trendChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom Section: Recent Activity & Accounts -->
+<div class="row g-4">
+  <!-- Recent Transactions -->
+  <div class="col-lg-8">
+    <div class="card shadow-sm border-0">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-clock-history text-primary me-2"></i>Recent Activity</h6>
+        <a href="{{ url_for('transactions.index') }}" class="btn btn-sm btn-outline-primary">View All</a>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Date</th>
+              <th>Description</th>
+              <th>Category</th>
+              <th>Account</th>
+              <th class="text-end">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for t in recent_transactions %}
+            <tr>
+              <td class="text-muted small">{{ t.transaction_date.strftime('%d %b %Y') }}</td>
+              <td>
+                <a href="{{ url_for('transactions.detail', transaction_id=t.id) }}" class="text-decoration-none fw-semibold text-dark">
+                  {{ t.description_original }}
+                </a>
+                {% if t.merchant %}
+                  <div class="text-muted" style="font-size: 0.75rem;"><i class="bi bi-shop me-1"></i>{{ t.merchant.name }}</div>
+                {% endif %}
+              </td>
+              <td>
+                {% if t.category %}
+                  <span class="badge bg-light text-dark border">{{ t.category.name }}</span>
+                {% else %}
+                  <span class="badge bg-warning-subtle text-warning border border-warning-subtle">Uncategorized</span>
+                {% endif %}
+              </td>
+              <td class="text-muted small">{{ t.account.name }}</td>
+              <td class="text-end fw-bold {% if t.transaction_type.name == 'income' %}text-success{% elif t.transaction_type.name == 'expense' %}text-danger{% else %}text-info{% endif %}">
+                {% if t.transaction_type.name == 'income' %}+{% elif t.transaction_type.name == 'expense' %}-{% endif %}
+                {{ t.amount | currency(t.currency_code) }}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="5" class="text-center py-4 text-muted">No transactions recorded yet.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Accounts Summary Card -->
+  <div class="col-lg-4">
+    <div class="card shadow-sm border-0">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-wallet text-primary me-2"></i>Your Accounts</h6>
+        <a href="{{ url_for('accounts.new') }}" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg"></i></a>
+      </div>
+      <div class="list-group list-group-flush">
+        {% for a in accounts %}
+        <div class="list-group-item d-flex justify-content-between align-items-center py-3">
+          <div>
+            <h6 class="mb-0 fw-semibold">{{ a.name }}</h6>
+            <span class="text-muted small">{{ a.account_type.name.title() }} {% if a.institution_name %}• {{ a.institution_name }}{% endif %}</span>
+          </div>
+          <div class="text-end">
+            <div class="fw-bold fs-6">{{ a.current_balance | currency(a.currency_code) }}</div>
+            <span class="badge bg-success-subtle text-success">Active</span>
+          </div>
+        </div>
+        {% else %}
+        <div class="text-center py-4 text-muted">
+          <p class="mb-2">No accounts created.</p>
+          <a href="{{ url_for('accounts.new') }}" class="btn btn-sm btn-outline-primary">Add an Account</a>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Category Doughnut Chart
+  {% if category_breakdown %}
+  const catCtx = document.getElementById('categoryChart').getContext('2d');
+  new Chart(catCtx, {
+    type: 'doughnut',
+    data: {
+      labels: {{ category_breakdown | map(attribute='category') | list | tojson }},
+      datasets: [{
+        data: {{ category_breakdown | map(attribute='amount') | list | tojson }},
+        backgroundColor: [
+          '#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+          '#ec4899', '#06b6d4', '#84cc16', '#64748b', '#14b8a6'
+        ],
+        borderWidth: 2,
+        hoverOffset: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false }
+      },
+      cutout: '70%'
+    }
+  });
+  {% endif %}
+
+  // Trend Bar Chart
+  const trendCtx = document.getElementById('trendChart').getContext('2d');
+  new Chart(trendCtx, {
+    type: 'bar',
+    data: {
+      labels: {{ monthly_trends | map(attribute='month_label') | list | tojson }},
+      datasets: [
+        {
+          label: 'Income',
+          data: {{ monthly_trends | map(attribute='income') | list | tojson }},
+          backgroundColor: '#10b981',
+          borderRadius: 4
+        },
+        {
+          label: 'Expense',
+          data: {{ monthly_trends | map(attribute='expense') | list | tojson }},
+          backgroundColor: '#ef4444',
+          borderRadius: 4
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          beginAtZero: true,
+          grid: { color: '#f1f5f9' }
+        },
+        x: {
+          grid: { display: false }
+        }
+      },
+      plugins: {
+        legend: { position: 'top' }
+      }
+    }
+  });
+</script>
+{% endblock %}
+

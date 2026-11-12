@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Rules - Admin - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <a href="{{ url_for('admin.index') }}" class="text-decoration-none text-muted small">
+      <i class="bi bi-arrow-left me-1"></i> Back to Admin Overview
+    </a>
+    <h2 class="fw-bold mb-0 mt-1">Global Categorization Rules</h2>
+    <p class="text-muted small mb-0">Deterministic pattern rules executed before ML classification</p>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card shadow-sm border-0">
+      <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-filter-square text-primary me-2"></i>Active Classification Rules</h6>
+        <span class="badge bg-light text-muted border">{{ rules | length }} Rules</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Pattern</th>
+              <th>Target Category</th>
+              <th>Match Type</th>
+              <th>Priority</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rules %}
+            <tr>
+              <td><code>{{ r.pattern }}</code></td>
+              <td><span class="badge bg-light text-dark border">{{ r.category.name }}</span></td>
+              <td><span class="badge bg-info-subtle text-info">{{ r.match_type }}</span></td>
+              <td><span class="fw-bold">{{ r.priority }}</span></td>
+              <td><span class="badge bg-success-subtle text-success">Active</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card shadow-sm border-0">
+      <div class="card-header bg-white py-3 border-bottom">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-plus-circle text-primary me-2"></i>Add Categorization Rule</h6>
+      </div>
+      <div class="card-body p-4">
+        <form action="{{ url_for('admin.rules') }}" method="POST">
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            {{ form.pattern.label(class="form-label fw-semibold") }}
+            {{ form.pattern(class="form-control", placeholder="e.g. SHELL or NETFLIX or SALARY") }}
+          </div>
+          <div class="mb-3">
+            {{ form.category_id.label(class="form-label fw-semibold") }}
+            {{ form.category_id(class="form-select") }}
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              {{ form.match_type.label(class="form-label fw-semibold") }}
+              {{ form.match_type(class="form-select") }}
+            </div>
+            <div class="col-md-6">
+              {{ form.priority.label(class="form-label fw-semibold") }}
+              {{ form.priority(class="form-control") }}
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Add Global Rule</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

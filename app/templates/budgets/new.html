@@ -1,0 +1,62 @@
+\% extends 'base.html' %}
+
+{% block title %}Create Budget - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0">
+      <div class="card-header bg-white py-3 border-bottom">
+        <h5 class="mb-0 fw-bold"><i class="bi bi-pie-chart text-primary me-2"></i>Create New Budget</h5>
+      </div>
+      <div class="card-body p-4">
+        <form method="POST" novalidate>
+          {{ form.hidden_tag() }}
+
+          <div class="mb-3">
+            {{ form.name.label(class="form-label fw-semibold") }}
+            {{ form.name(class="form-control" + (" is-invalid" if form.name.errors else ""), placeholder="e.g. Monthly
+            Living Expenses") }}
+            {% for error in form.name.errors %}
+            <div class="invalid-feedback">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              {{ form.period_type.label(class="form-label fw-semibold") }}
+              {{ form.period_type(class="form-select") }}
+            </div>
+            <div class="col-md-6">
+              {{ form.currency_code.label(class="form-label fw-semibold") }}
+              {{ form.currency_code(class="form-select") }}
+            </div>
+          </div>
+
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              {{ form.start_date.label(class="form-label fw-semibold") }}
+              {{ form.start_date(class="form-control" + (" is-invalid" if form.start_date.errors else "")) }}
+              {% for error in form.start_date.errors %}
+              <div class="invalid-feedback">{{ error }}</div>
+              {% endfor %}
+            </div>
+            <div class="col-md-6">
+              {{ form.end_date.label(class="form-label fw-semibold") }}
+              {{ form.end_date(class="form-control" + (" is-invalid" if form.end_date.errors else "")) }}
+              {% for error in form.end_date.errors %}
+              <div class="invalid-feedback">{{ error }}</div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-between pt-3 border-top">
+            <a href="{{ url_for('budgets.index') }}" class="btn btn-outline-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary px-4">Continue to Category Limits &rarr;</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
